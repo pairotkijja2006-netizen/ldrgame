@@ -60,7 +60,7 @@ function addQ(room, playerId, prompt, choices, correct) {
 
 const q = (n) => ({
   prompt: `What is my favorite food ${n}?`,
-  choices: ["Sushi roll", "Pizza slice", "Ice cream"],
+  choices: ["Sushi roll", "Pizza slice", "Ice cream", "Burgers"],
   correct: 0,
 });
 
@@ -89,7 +89,7 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
 {
   const room = makeRoom();
   const { a } = twoPlayers(room);
-  addQ(room, a.playerId, "What is my favorite food?", ["My favorite food is sushi", "Pizza pie", "Hot dog"], 0);
+  addQ(room, a.playerId, "What is my favorite food?", ["My favorite food is sushi", "Pizza pie", "Hot dog", "Burgers"], 0);
   const stored = room.task.questions.momo[0];
   assert(stored.prompt === "What is my favorite food?", `B: prompt spaces, got ${JSON.stringify(stored.prompt)}`);
   assert(stored.choices[0] === "My favorite food is sushi", `B: choice spaces, got ${JSON.stringify(stored.choices[0])}`);
@@ -98,11 +98,32 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
   console.log("PASS B — spaces stored in question and answers");
 }
 
+// --- Test B2: 4 choices + correct answer required ---
+{
+  const room = makeRoom();
+  const { a } = twoPlayers(room);
+  addQ(room, a.playerId, "", ["Sushi", "Pizza", "Ramen", "Burgers"], 0);
+  assert(room.task.questions.momo.length === 0, "B2: empty prompt rejected");
+  assert(room.failMessage === "Please enter a question.", `B2: prompt msg got ${room.failMessage}`);
+  addQ(room, a.playerId, "What is my favorite food?", ["Sushi", "Pizza", "", "Burgers"], 0);
+  assert(room.task.questions.momo.length === 0, "B2: incomplete choices rejected");
+  assert(room.failMessage === "Please fill in all four answer choices.", `B2: choices msg got ${room.failMessage}`);
+  addQ(room, a.playerId, "What is my favorite food?", ["Sushi", "Pizza", "Ramen", "Burgers"], null);
+  assert(room.task.questions.momo.length === 0, "B2: missing correct rejected");
+  assert(room.failMessage === "Please select the correct answer.", `B2: correct msg got ${room.failMessage}`);
+  addQ(room, a.playerId, "What is my favorite food?", ["Sushi", "Pizza", "Ramen", "Burgers"], 3);
+  assert(room.task.questions.momo.length === 1, "B2: valid 4-choice question saved");
+  assert(room.task.questions.momo[0].choices.length === 4, "B2: stored 4 choices");
+  assert(room.task.questions.momo[0].correct === 3, "B2: correct is D");
+  console.log("PASS B2 — 4 choices and correct-answer validation");
+}
+
+
 // --- Test C: next question is a new empty slot ---
 {
   const room = makeRoom();
   const { a } = twoPlayers(room);
-  addQ(room, a.playerId, "What is my favorite food?", ["Sushi", "Pizza", "Burger"], 0);
+  addQ(room, a.playerId, "What is my favorite food?", ["Sushi", "Pizza", "Burger", "Ramen"], 0);
   const v = room.viewFor(a.playerId);
   assert(v.task.created === 1, "C: created is 1");
   assert(v.task.questionNumber === 2, "C: now writing question 2");
@@ -118,7 +139,7 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
   addQ(room, a.playerId, q(1).prompt, q(1).choices, 0);
   addQ(room, a.playerId, q(2).prompt, q(2).choices, 0);
   addQ(room, a.playerId, q(3).prompt, q(3).choices, 0);
-  addQ(room, a.playerId, "FOURTH?", ["A", "B", "C"], 0);
+  addQ(room, a.playerId, "FOURTH?", ["A", "B", "C", "D"], 0);
   const v = room.viewFor(a.playerId);
   assert(room.task.questions.momo.length === 3, "D: cannot store a 4th question");
   assert(v.task.created === 3, "D: created capped at 3");
@@ -140,7 +161,7 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
   assert(room.viewFor(a.playerId).task.stage === "create", "E: momo waits");
   assert(room.viewFor(a.playerId).task.waitingForPartner === true, "E: momo waiting flag");
   assert(room.viewFor(b.playerId).task.stage === "create", "E: tian still creating");
-  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, `Tian q ${i} with space`, ["Matcha tea", "Coffee cup", "Coke can"], 1);
+  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, `Tian q ${i} with space`, ["Matcha tea", "Coffee cup", "Coke can", "Water bottle"], 1);
   const va = room.viewFor(a.playerId);
   const vb = room.viewFor(b.playerId);
   assert(va.task.stage === "answer", "E: momo moved to answer");
@@ -155,7 +176,7 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
   const room = makeRoom();
   const { a, b } = twoPlayers(room);
   for (let i = 1; i <= 3; i++) addQ(room, a.playerId, q(i).prompt, q(i).choices, 0);
-  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, q(i).prompt, ["Matcha", "Coffee", "Coke"], 0);
+  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, q(i).prompt, ["Matcha", "Coffee", "Coke", "Juice"], 0);
   room.puzzleInput(a.playerId, { action: "answer", choice: 0 });
   let va = room.viewFor(a.playerId);
   assert(va.task.feedback && va.task.feedback.ok === true, "F: correct feedback");
@@ -175,7 +196,7 @@ const htmlSrc = fs.readFileSync(path.join(__dirname, "../public/index.html"), "u
 {
   const room = makeRoom();
   const { a, b } = twoPlayers(room);
-  addQ(room, a.playerId, "OLD QUESTION", ["Sushi", "Pizza", "Burger"], 0);
+  addQ(room, a.playerId, "OLD QUESTION", ["Sushi", "Pizza", "Burger", "Ramen"], 0);
   const oldId = room.task.setId;
   room.startTask(2);
   const v = room.viewFor(a.playerId);
@@ -277,7 +298,7 @@ function drainDecision(room) {
 
 function winQuiz(room, a, b) {
   for (let i = 1; i <= 3; i++) addQ(room, a.playerId, q(i).prompt, q(i).choices, 0);
-  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, `Tian q ${i}`, ["Matcha", "Coffee", "Coke"], 0);
+  for (let i = 1; i <= 3; i++) addQ(room, b.playerId, `Tian q ${i}`, ["Matcha", "Coffee", "Coke", "Juice"], 0);
   for (let i = 0; i < 3; i++) {
     room.puzzleInput(a.playerId, { action: "answer", choice: 0 });
     room.puzzleInput(a.playerId, { action: "nextAnswer" });
@@ -1193,6 +1214,10 @@ assert(!htmlSrc.includes("debug-skip") && !htmlSrc.includes("NEXT GAME"), "HTML:
 assert(!uiSrc.includes("data-add-coins") && !uiSrc.includes("+5 COINS"), "UI: no free coins debug button");
 assert(uiSrc.includes("[1, 2, 3, 4, 5]"), "UI: five-game HUD");
 assert(uiSrc.includes("A)"), "UI: A) labels");
+assert(uiSrc.includes("D)"), "UI: D) labels");
+assert(uiSrc.includes('id="q-d"'), "UI: answer D input");
+assert(uiSrc.includes("Please select the correct answer."), "UI: correct-answer validation copy");
+assert(uiSrc.includes("Please fill in all four answer choices."), "UI: four-choices validation copy");
 assert(uiSrc.includes('data-path="again"'), "UI: Play Again button");
 assert(uiSrc.includes('data-path="on"'), "UI: Move On button");
 assert(uiSrc.includes("choosePath"), "UI: decisions go through the server");

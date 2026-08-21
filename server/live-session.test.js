@@ -100,17 +100,17 @@ async function playGame2(momo, tian) {
   const write = (sock, n, prompt, choices, correct) =>
     sock.emit("puzzle", { action: "addQuestion", prompt, choices, correct });
 
-  write(momo, 1, "What is my favorite food?", ["My favorite food is matcha", "Coffee cup", "Coke can"], 0);
+  write(momo, 1, "What is my favorite food?", ["My favorite food is matcha", "Coffee cup", "Coke can", "Water"], 0);
   await waitFor(momo, (s) => s.task.created === 1, "q1 saved");
   assert(momo.latest.task.questionNumber === 2, "live G2: moved to question 2");
 
-  write(momo, 2, "Where did we first meet?", ["The book store", "A train", "School"], 0);
+  write(momo, 2, "Where did we first meet?", ["The book store", "A train", "School", "Cafe"], 0);
   await waitFor(momo, (s) => s.task.created === 2, "q2 saved");
-  write(momo, 3, "What do I drink daily?", ["Matcha latte", "Black tea", "Water"], 0);
+  write(momo, 3, "What do I drink daily?", ["Matcha latte", "Black tea", "Water", "Juice"], 0);
   await waitFor(momo, (s) => s.task.created === 3, "q3 saved");
 
   // Try to sneak in a fourth.
-  write(momo, 4, "FOURTH QUESTION", ["A", "B", "C"], 0);
+  write(momo, 4, "FOURTH QUESTION", ["A", "B", "C", "D"], 0);
   await sleep(400);
   assert(momo.latest.task.created === 3, "live G2: a 4th question was created");
   assert(momo.latest.task.waitingForPartner === true, "live G2: should be waiting for partner");
@@ -118,11 +118,11 @@ async function playGame2(momo, tian) {
   assert(tian.latest.task.stage === "create", "live G2: partner still writing");
   console.log("PASS live G2 — exactly 3 questions, early finisher waits for partner");
 
-  write(tian, 1, "What is my favorite drink?", ["Matcha", "Coffee", "Coke"], 0);
+  write(tian, 1, "What is my favorite drink?", ["Matcha", "Coffee", "Coke", "Juice"], 0);
   await sleep(200);
   assert(momo.latest.task.stage === "create", "live G2: still waiting after partner q1");
-  write(tian, 2, "My favorite color?", ["Pink", "Blue", "Green"], 0);
-  write(tian, 3, "My favorite season?", ["Winter time", "Summer", "Spring"], 1);
+  write(tian, 2, "My favorite color?", ["Pink", "Blue", "Green", "Yellow"], 0);
+  write(tian, 3, "My favorite season?", ["Winter time", "Summer", "Spring", "Autumn"], 1);
 
   await waitFor(momo, (s) => s.task.stage === "answer", "answering starts");
   await waitFor(tian, (s) => s.task.stage === "answer", "partner answering starts");

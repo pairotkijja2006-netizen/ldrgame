@@ -269,11 +269,11 @@ const UI = (() => {
   }
 
   function choiceTag(i) {
-    return ["A)", "B)", "C)"][i] || "";
+    return ["A)", "B)", "C)", "D)"][i] || "";
   }
 
   function emptyQuizDraft() {
-    return { prompt: "", a: "", b: "", c: "", correct: null };
+    return { prompt: "", a: "", b: "", c: "", d: "", correct: null };
   }
 
   function bindTextField(el, onChange) {
@@ -365,16 +365,12 @@ const UI = (() => {
         <p class="tiny">Partner has written ${t.partnerCreated} / 3</p>
         <form autocomplete="off" onsubmit="return false">
           <textarea class="pixel-input" id="q-prompt" name="ldr-q-${key}-prompt" rows="2" maxlength="72" placeholder="Question" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly></textarea>
-          <label class="labeled-input"><span class="lab">A)</span><input class="pixel-input" id="q-a" name="ldr-q-${key}-a" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /></label>
-          <label class="labeled-input"><span class="lab">B)</span><input class="pixel-input" id="q-b" name="ldr-q-${key}-b" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /></label>
-          <label class="labeled-input"><span class="lab">C)</span><input class="pixel-input" id="q-c" name="ldr-q-${key}-c" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /></label>
+          <label class="labeled-input quiz-choice-row"><span class="lab">A)</span><input class="pixel-input" id="q-a" name="ldr-q-${key}-a" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /><button class="btn quiz-mark" type="button" data-correct="0" title="Mark A as correct">○</button></label>
+          <label class="labeled-input quiz-choice-row"><span class="lab">B)</span><input class="pixel-input" id="q-b" name="ldr-q-${key}-b" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /><button class="btn quiz-mark" type="button" data-correct="1" title="Mark B as correct">○</button></label>
+          <label class="labeled-input quiz-choice-row"><span class="lab">C)</span><input class="pixel-input" id="q-c" name="ldr-q-${key}-c" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /><button class="btn quiz-mark" type="button" data-correct="2" title="Mark C as correct">○</button></label>
+          <label class="labeled-input quiz-choice-row"><span class="lab">D)</span><input class="pixel-input" id="q-d" name="ldr-q-${key}-d" type="text" maxlength="28" placeholder="Answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly /><button class="btn quiz-mark" type="button" data-correct="3" title="Mark D as correct">○</button></label>
         </form>
-        <p class="tiny">Correct answer</p>
-        <div class="actions">
-          <button class="btn" type="button" data-correct="0">A)</button>
-          <button class="btn" type="button" data-correct="1">B)</button>
-          <button class="btn" type="button" data-correct="2">C)</button>
-        </div>
+        <p class="tiny">Tap ○ next to the correct answer</p>
         <div class="actions"><button class="btn good" type="button" id="btn-save-q">SAVE QUESTION</button></div>
         ${state.failMessage ? `<div class="fail">${esc(state.failMessage)}</div>` : ""}
       </div>`;
@@ -383,7 +379,7 @@ const UI = (() => {
       const c = t.current.choices || [];
       const fb = t.feedback;
       const n = t.current.number || Math.min(3, (t.answered || 0) + 1);
-      const rows = [0, 1, 2]
+      const rows = [0, 1, 2, 3]
         .map((i) => {
           const mark = i === fb.choice ? (fb.ok ? " ✓" : " ✗") : "";
           const cls = i === fb.choice ? (fb.ok ? "choice-ok" : "choice-bad") : i === fb.correct && !fb.ok ? "choice-true" : "";
@@ -419,6 +415,7 @@ const UI = (() => {
           <button class="btn wide" type="button" data-choice="0">${choiceTag(0)} ${esc(c[0] || "")}</button>
           <button class="btn wide" type="button" data-choice="1">${choiceTag(1)} ${esc(c[1] || "")}</button>
           <button class="btn wide" type="button" data-choice="2">${choiceTag(2)} ${esc(c[2] || "")}</button>
+          <button class="btn wide" type="button" data-choice="3">${choiceTag(3)} ${esc(c[3] || "")}</button>
         </div>
       </div>`;
     }
@@ -763,6 +760,7 @@ const UI = (() => {
         draftQuiz.a = (document.getElementById("q-a") || {}).value || "";
         draftQuiz.b = (document.getElementById("q-b") || {}).value || "";
         draftQuiz.c = (document.getElementById("q-c") || {}).value || "";
+        draftQuiz.d = (document.getElementById("q-d") || {}).value || "";
       };
       const fill = (el, value) => {
         if (!el) return;
@@ -770,29 +768,57 @@ const UI = (() => {
         el.defaultValue = "";
         el.value = value || "";
       };
+      const syncMarks = () => {
+        document.querySelectorAll("[data-correct]").forEach((btn) => {
+          const selected = draftQuiz.correct != null && Number(btn.getAttribute("data-correct")) === draftQuiz.correct;
+          btn.classList.toggle("picked", selected);
+          btn.textContent = selected ? "●" : "○";
+        });
+      };
       fill(document.getElementById("q-prompt"), draftQuiz.prompt);
       fill(document.getElementById("q-a"), draftQuiz.a);
       fill(document.getElementById("q-b"), draftQuiz.b);
       fill(document.getElementById("q-c"), draftQuiz.c);
-      ["q-prompt", "q-a", "q-b", "q-c"].forEach((id) => bindTextField(document.getElementById(id), readDraft));
+      fill(document.getElementById("q-d"), draftQuiz.d);
+      ["q-prompt", "q-a", "q-b", "q-c", "q-d"].forEach((id) => bindTextField(document.getElementById(id), readDraft));
       document.querySelectorAll("[data-correct]").forEach((btn) => {
-        if (draftQuiz.correct != null && Number(btn.getAttribute("data-correct")) === draftQuiz.correct) {
-          btn.classList.add("picked");
-        }
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
           draftQuiz.correct = Number(btn.getAttribute("data-correct"));
-          document.querySelectorAll("[data-correct]").forEach((b) => b.classList.remove("picked"));
-          btn.classList.add("picked");
+          syncMarks();
         });
       });
+      syncMarks();
       const save = document.getElementById("btn-save-q");
       if (save) {
         save.onclick = () => {
           readDraft();
+          const prompt = (draftQuiz.prompt || "").trim();
+          const choices = [draftQuiz.a, draftQuiz.b, draftQuiz.c, draftQuiz.d].map((x) => (x || "").trim());
+          let fail = null;
+          if (!prompt) fail = "Please enter a question.";
+          else if (choices.some((c) => !c)) fail = "Please fill in all four answer choices.";
+          else if (draftQuiz.correct == null || ![0, 1, 2, 3].includes(Number(draftQuiz.correct))) {
+            fail = "Please select the correct answer.";
+          }
+          if (fail) {
+            const box = document.querySelector("#game-panel .fail");
+            if (box) box.textContent = fail;
+            else {
+              const panel = document.getElementById("game-panel");
+              if (panel) {
+                const div = document.createElement("div");
+                div.className = "fail";
+                div.textContent = fail;
+                panel.appendChild(div);
+              }
+            }
+            return;
+          }
           Net.emit("puzzle", {
             action: "addQuestion",
             prompt: draftQuiz.prompt,
-            choices: [draftQuiz.a, draftQuiz.b, draftQuiz.c],
+            choices: [draftQuiz.a, draftQuiz.b, draftQuiz.c, draftQuiz.d],
             correct: draftQuiz.correct,
           });
         };

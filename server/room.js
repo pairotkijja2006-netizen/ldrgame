@@ -3209,10 +3209,21 @@ class Room {
         return;
       }
       const prompt = cleanText(payload.prompt, 72);
-      const choices = [0, 1, 2].map((i) => cleanText((payload.choices || [])[i], 28));
-      const correct = Number(payload.correct);
-      if (!prompt || choices.some((c) => !c) || ![0, 1, 2].includes(correct)) {
-        this.failMessage = "Fill the question, 3 answers, and mark the correct one.";
+      const choices = [0, 1, 2, 3].map((i) => cleanText((payload.choices || [])[i], 28));
+      const correctRaw = payload.correct;
+      const correct = correctRaw == null || correctRaw === "" ? NaN : Number(correctRaw);
+      if (!prompt) {
+        this.failMessage = "Please enter a question.";
+        this.emit();
+        return;
+      }
+      if (choices.some((c) => !c)) {
+        this.failMessage = "Please fill in all four answer choices.";
+        this.emit();
+        return;
+      }
+      if (![0, 1, 2, 3].includes(correct)) {
+        this.failMessage = "Please select the correct answer.";
         this.emit();
         return;
       }
@@ -3232,7 +3243,7 @@ class Room {
       if (t.feedback[ch]) return;
       if (t.answers[ch].length >= 3) return;
       const choice = Number(payload.choice);
-      if (![0, 1, 2].includes(choice)) return;
+      if (![0, 1, 2, 3].includes(choice)) return;
       const other = ch === "momo" ? "tiantian" : "momo";
       const q = (t.questions[other] || [])[t.answers[ch].length];
       if (!q) return;
