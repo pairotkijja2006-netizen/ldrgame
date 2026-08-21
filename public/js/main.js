@@ -131,9 +131,6 @@
     syncFullscreenBtn();
   }
 
-  const skipBtn = document.getElementById("debug-skip");
-  if (skipBtn) skipBtn.addEventListener("click", () => Net.emit("skipGame"));
-
   window.addEventListener("pointerdown", () => AudioBus.unlock(), { once: false });
 
   function loop() {

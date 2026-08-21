@@ -673,11 +673,11 @@ function winDraw(room, a, b) {
   room.startTask(5);
   skipDodgeIntro(room, a);
   assert(!room.task.ldr.angry, "RED: starts in normal mode");
-  room.task.hits = 25;
+  room.task.hits = 30;
   room.task.seenTips = { rage: true, wall: true, minion: true, yellow: true, special: true };
   room.task.brief = null;
   room.tick();
-  assert(room.task.ldr.angry, "RED: 20 HP remaining enters red mode");
+  assert(room.task.ldr.angry, "RED: 40 HP remaining enters red mode");
   room.task.stage = "to1";
   room.task.hold = 0;
   room.tick();
@@ -706,7 +706,7 @@ function winDraw(room, a, b) {
   assert(Math.abs(room.task.walls[0].x + room.task.walls[0].w / 2 - room.task.ldr.x) < 8, "RED: the wall stays in front of LDR as LDR moves");
   void a;
   void b;
-  console.log("PASS RED — LDR stays in red mode after 25 damage");
+  console.log("PASS RED — LDR stays in red mode after 30 damage");
 }
 
 {
@@ -727,7 +727,7 @@ function winDraw(room, a, b) {
   room.tick();
   finishAttackIntro(room, a);
   assert(room.task.stage === "phase2", "SHOP: both NO skips the shop immediately");
-  room.task.hits = 25;
+  room.task.hits = 30;
   enterPhase2(room, a);
   assert((room.task.minions || []).length === 2, "MINION: two minions spawn at 20 HP during attack");
   const keep = room.task.minions.length;
@@ -785,7 +785,7 @@ function winDraw(room, a, b) {
   room.countdown = null;
   room.startTask(5);
   skipDodgeIntro(room, a);
-  room.task.hits = 25;
+  room.task.hits = 30;
   enterPhase2(room, a);
   room.task.brief = null;
   room.task.tipQueue = [];
@@ -1002,7 +1002,7 @@ function winDraw(room, a, b) {
   room.countdown = null;
   room.startTask(5);
   skipDodgeIntro(room, a);
-  room.task.hits = 25;
+  room.task.hits = 30;
   enterPhase2(room, a);
   assert(room.task.brief && room.task.brief.kind === "rage", "TIP: enraged attack starts with NOW I AM FURIOUS");
   assert(Math.abs((room.task.timeLeft || 0) - 28) < 0.2, "TIP: attack timer gains 8 seconds immediately when enraged");
@@ -1046,7 +1046,7 @@ function winDraw(room, a, b) {
   room.startTask(5);
   skipDodgeIntro(room, a);
   room.task.seenTips = { rage: true, wall: true, minion: true, yellow: true, special: true };
-  room.task.hits = 25;
+  room.task.hits = 30;
   enterPhase2(room, a);
   assert(Math.abs((room.task.timeLeft || 0) - 28) < 0.05, "TIMER: enrage adds 8 to a fresh 20s attack timer");
   room.task.elapsed = 22;
@@ -1136,14 +1136,21 @@ function winDraw(room, a, b) {
   room.countdown = null;
   room.startTask(1);
   room.disconnect("sock-a");
-  assert(room.idleResetTimer == null, "IDLE: one disconnected player does not start the 5-minute reset");
+  assert(room.connectedPlayers().length === 1, "IDLE: one disconnect leaves one active player");
+  assert(room.idleResetTimer == null, "IDLE: one disconnected player does not wipe the room");
   assert(room.phase === "play" || room.paused, "IDLE: the remaining player keeps the session");
+  const filler = room.join("sock-c");
+  assert(filler.ok && !filler.full, "IDLE: a free slot can be taken by a new player");
+  assert(room.connectedPlayers().length === 2, "IDLE: room is full again after a replacement join");
   room.disconnect("sock-b");
-  assert(!!room.idleResetTimer, "IDLE: both players gone starts the 5-minute reset");
-  room.clearIdleReset();
-  const again = room.join("sock-a", a.playerId);
-  assert(again.reconnected, "IDLE: a player can still reconnect");
-  assert(room.idleResetTimer == null, "IDLE: a reconnect cancels the empty-session reset");
+  room.disconnect("sock-c");
+  assert(room.connectedPlayers().length === 0, "IDLE: both gone leaves an empty room");
+  assert(room.phase === "select", "IDLE: empty room resets to a fresh session");
+  assert(!room.task, "IDLE: empty room clears game state");
+  const again = room.join("sock-d");
+  assert(again.ok && !again.reconnected, "IDLE: next visitor starts a new seat");
+  assert(room.connectedPlayers().length === 1, "IDLE: fresh session shows 1 / 2");
+  void a;
   void b;
   console.log("PASS IDLE — reset only after both players are gone");
 }
@@ -1182,7 +1189,8 @@ assert(uiSrc.includes("WRONG! ✗"), "UI: wrong copy");
 assert(cssSrc.includes("background: var(--panel)"), "CSS: dialogue is opaque");
 assert(!/#dialogue\s+\.dialogue[\s\S]{0,400}rgba\(34,\s*20,\s*28/.test(cssSrc), "CSS: dialogue is not the transparent overlay");
 assert(/min-height:\s*118px/.test(cssSrc), "CSS: textbox is slightly taller");
-assert(htmlSrc.includes("debug-skip") && htmlSrc.includes("NEXT GAME"), "HTML: debug next-game button");
+assert(!htmlSrc.includes("debug-skip") && !htmlSrc.includes("NEXT GAME"), "HTML: no debug next-game button");
+assert(!uiSrc.includes("data-add-coins") && !uiSrc.includes("+5 COINS"), "UI: no free coins debug button");
 assert(uiSrc.includes("[1, 2, 3, 4, 5]"), "UI: five-game HUD");
 assert(uiSrc.includes("A)"), "UI: A) labels");
 assert(uiSrc.includes('data-path="again"'), "UI: Play Again button");

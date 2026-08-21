@@ -16,6 +16,12 @@ const Net = (() => {
     const token = sessionStorage.getItem(TOKEN_KEY);
     socket = io({ auth: { token } });
 
+    window.addEventListener("pagehide", () => {
+      try {
+        if (socket && socket.connected) socket.disconnect();
+      } catch (_) {}
+    });
+
     socket.on("connect", () => {
       if (handlers.connect) handlers.connect();
     });

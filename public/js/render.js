@@ -522,31 +522,26 @@ const Render = (() => {
       ctx.fill();
     }
     if (t && t.aoe && t.aoe.zones) {
-      const purple = t.aoe.color === "purple";
       for (const zone of t.aoe.zones) {
         const flashing = zone.flash || (t.aoe && t.aoe.flash);
-        ctx.strokeStyle = flashing ? "#ffffff" : purple ? "#c07bff" : "#ff6b4a";
+        ctx.strokeStyle = flashing ? "#ffffff" : "#ff6b4a";
         ctx.lineWidth = 3;
         ctx.setLineDash([8, 6]);
         ctx.beginPath();
         ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = flashing
-          ? "rgba(255, 255, 255, 0.88)"
-          : purple
-            ? "rgba(168, 48, 255, 0.55)"
-            : "rgba(255, 80, 48, 0.5)";
+        ctx.fillStyle = flashing ? "rgba(255, 255, 255, 0.88)" : "rgba(255, 80, 48, 0.5)";
         ctx.beginPath();
         ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = purple ? "#e9b8ff" : "#ffb39a";
+        ctx.strokeStyle = "#ffb39a";
         ctx.lineWidth = 4;
         ctx.setLineDash([]);
         ctx.beginPath();
         ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = purple ? "#ffd6ff" : "#ffe0d0";
+        ctx.fillStyle = "#ffe0d0";
         ctx.font = "10px 'Press Start 2P'";
         ctx.textAlign = "center";
         ctx.fillText("!", zone.x, zone.y + 4);
@@ -756,7 +751,16 @@ const Render = (() => {
       const hurt = state.task && state.task.hurtFlash && state.task.hurtFlash[p.character] > 0;
       ctx.globalAlpha = out ? 0.35 : 1;
       if (shieldCharges > 0 && !out) {
-        const frac = Math.max(0, Math.min(1, shieldCharges / 4));
+        const maxMap = state.task && state.task.shieldMax;
+        let shieldMax = 4;
+        if (state.myCharacter === p.character && state.task && state.task.myShieldMax != null) {
+          shieldMax = state.task.myShieldMax;
+        } else if (typeof maxMap === "number") {
+          shieldMax = maxMap;
+        } else if (maxMap && maxMap[p.character] != null) {
+          shieldMax = maxMap[p.character];
+        }
+        const frac = Math.max(0, Math.min(1, shieldCharges / Math.max(1, shieldMax)));
         ctx.strokeStyle = "rgba(74, 208, 255, 0.28)";
         ctx.lineWidth = 4;
         ctx.beginPath();

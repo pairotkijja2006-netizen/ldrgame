@@ -187,29 +187,6 @@ body {
   color: #1a1018;
 }
 
-/* TEMP DEBUG: remove later */
-#debug-skip {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 9;
-  font-family: inherit;
-  font-size: 7px;
-  color: var(--ink);
-  background: var(--panel);
-  border: 3px solid var(--ink);
-  padding: 6px 8px;
-  cursor: pointer;
-  box-shadow: 3px 3px 0 #000;
-  opacity: 0.72;
-}
-
-#debug-skip:hover {
-  opacity: 1;
-  background: var(--gold);
-  color: #1a1018;
-}
-
 #draw-wrap {
   position: absolute;
   left: 50%;
@@ -357,6 +334,8 @@ body {
 .char-card h2 {
   margin-top: 10px;
   font-size: 12px;
+  color: var(--ink);
+  text-shadow: 1px 1px 0 #000;
 }
 
 .badge {
@@ -1355,14 +1334,6 @@ textarea.pixel-input {
   .shop-toast {
     bottom: 220px;
   }
-}
-.boss-add-coins {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 9;
-  font-size: 8px;
-  padding: 8px 10px;
 }
 .boss-bottom-hud {
   display: none;

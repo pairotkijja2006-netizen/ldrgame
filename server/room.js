@@ -21,7 +21,7 @@ const PIANO_FAST_AT = 30;
 const BOSS_PHASE1 = 35;
 const BOSS_PHASE2 = 20;
 const BOSS_HITS = 70;
-const BOSS_ANGRY_HP = 45;
+const BOSS_ANGRY_HP = 40;
 const BOSS_FINAL_HP = 20;
 const BOSS_ANGRY_HITS = BOSS_HITS - BOSS_ANGRY_HP;
 const BOSS_FINAL_HITS = BOSS_HITS - BOSS_FINAL_HP;
@@ -49,7 +49,8 @@ const COIN_ANGRY_CUT = 1.5;
 const BLUE_WALL_HP = 8;
 const BLUE_WALL_CD = 8;
 const FINAL_MINION_SHOT = 2.5;
-const MINION_HP = 6;
+const MINION_HP_BASE = 2;
+const MINION_HP_STEP = 2;
 const FINAL_MINION_HP = 10;
 const HP_EVERY = 13;
 const PICKUP_GAP = 32;
@@ -478,10 +479,11 @@ function placeAoeZones(living, maxZones) {
   return zones.slice(0, limit);
 }
 
-function damageBlueWall(task) {
+function damageBlueWall(task, amount) {
   const wall = task.blueWall;
   if (!wall) return false;
-  wall.hp = (wall.hp == null ? BLUE_WALL_HP : wall.hp) - 1;
+  const dmg = amount == null ? 1 : amount;
+  wall.hp = (wall.hp == null ? BLUE_WALL_HP : wall.hp) - dmg;
   wall.flash = 0.14;
   if (wall.hp <= 0) {
     task.blueWall = null;
@@ -495,29 +497,6 @@ function aoeOverlapsWall(zone, wall) {
   const nearestX = clamp(zone.x, wall.x, wall.x + wall.w);
   const nearestY = clamp(zone.y, wall.y, wall.y + wall.h);
   return Math.hypot(zone.x - nearestX, zone.y - nearestY) <= (zone.r || 0);
-}
-
-function shotTouchesBlueWall(task, shot, x0, y0, x1, y1) {
-  const wall = task.blueWall;
-  if (!wall || !shot) return false;
-  if (wallHitsShot(wall, x0, y0, x1, y1)) return true;
-  return (
-    shot.x >= wall.x &&
-    shot.x <= wall.x + wall.w &&
-    shot.y >= wall.y &&
-    shot.y <= wall.y + wall.h
-  );
-}
-
-function passDamageBlueWall(task, shot, x0, y0, x1, y1) {
-  if (!shotTouchesBlueWall(task, shot, x0, y0, x1, y1)) {
-    if (shot) shot.damagedBlueWall = false;
-    return false;
-  }
-  if (shot.damagedBlueWall) return false;
-  shot.damagedBlueWall = true;
-  damageBlueWall(task);
-  return true;
 }
 
 function coinBlockedByControls(x, y) {
@@ -635,10 +614,43 @@ function randomMinionPos(task) {
   return null;
 }
 
+function angryMinionHp(task) {
+  const wave = Math.max(1, task.angryAttackWave || 1);
+  return MINION_HP_BASE + (wave - 1) * MINION_HP_STEP;
+}
+
+function advanceAngryAttackWave(task) {
+  task.angryAttackWave = (task.angryAttackWave || 0) + 1;
+}
+
+function shieldMaxFor(task, ch) {
+  const m = task && task.shieldMax;
+  if (m == null) return SHIELD_MAX;
+  if (typeof m === "number") return m;
+  return m[ch] || SHIELD_MAX;
+}
+
+function grantShieldPurchase(task) {
+  task.buffs = task.buffs || { shield: false, racket: false };
+  task.buffs.shield = true;
+  task.shieldHits = task.shieldHits || { momo: 0, tiantian: 0 };
+  const nextMax = {};
+  const nextHits = {};
+  for (const who of ["momo", "tiantian"]) {
+    const current = task.shieldHits[who] || 0;
+    const max = current > 0 ? current + 4 : SHIELD_MAX;
+    nextMax[who] = max;
+    nextHits[who] = max;
+  }
+  task.shieldMax = nextMax;
+  task.shieldHits = nextHits;
+}
+
 function spawnMinions(task) {
   if (!task.ldr) return false;
   task.minions = task.minions || [];
   const z = minionZone();
+  const hp = angryMinionHp(task);
   let added = 0;
   for (let n = 0; n < 2; n++) {
     if (task.minions.length >= MINION_CAP) break;
@@ -652,7 +664,7 @@ function spawnMinions(task) {
       y,
       vx: (added % 2 === 0 ? -1 : 1) * 22,
       vy: 14,
-      hp: MINION_HP,
+      hp,
       r: 12,
       nextShot: 0.6 + Math.random() * 0.5,
     });
@@ -909,7 +921,7 @@ const ENDING_SCRIPT = [
     text: "NOOOOOOO! YOU ACTUALLY BEAT ME?!",
     fx: "ldrShrink",
   },
-  { type: "cinematic", scene: "reunion", name: "hug", ms: 3200 },
+  { type: "cinematic", scene: "reunion", name: "hug", ms: 1600 },
   {
     type: "line",
     scene: "reunion",
@@ -986,6 +998,7 @@ class Room {
     this.line = null;
     this.cinematic = null;
     this.cinematicUntil = 0;
+    this.scriptLockUntil = 0;
     this.countdown = null;
     this.taskIndex = 0;
     this.progress = emptyProgress();
@@ -997,6 +1010,7 @@ class Room {
     this.task = null;
     this.decision = null;
     this.failMessage = null;
+    this.openCharacter = null;
     this.dinnerDark = 0;
     this.dinnerTira = 0;
     this.usedCategories = [];
@@ -1045,13 +1059,9 @@ class Room {
   scheduleIdleResetIfEmpty() {
     this.clearIdleReset();
     if (this.connectedPlayers().length > 0) return;
-    this.idleResetTimer = setTimeout(() => {
-      this.idleResetTimer = null;
-      if (this.connectedPlayers().length === 0) {
-        this.reset(false);
-        this.emit();
-      }
-    }, IDLE_RESET_MS);
+    // Empty room: wipe immediately so the next visitor starts fresh.
+    this.reset(false);
+    this.emit();
   }
 
   playerList() {
@@ -1063,7 +1073,7 @@ class Room {
   }
 
   byCharacter(ch) {
-    return this.playerList().find((p) => p.character === ch) || null;
+    return this.connectedPlayers().find((p) => p.character === ch) || null;
   }
 
   getPlayer(id) {
@@ -1072,12 +1082,39 @@ class Room {
 
   takenMap() {
     return {
-      momo: this.playerList().some((p) => p.character === "momo"),
-      tiantian: this.playerList().some((p) => p.character === "tiantian"),
+      momo: this.connectedPlayers().some((p) => p.character === "momo"),
+      tiantian: this.connectedPlayers().some((p) => p.character === "tiantian"),
     };
   }
 
+  placeJoinedCharacter(player, character) {
+    if (!player || (character !== "momo" && character !== "tiantian")) return;
+    player.character = character;
+    player.facing = character === "momo" ? 1 : -1;
+    player.x = character === "momo" ? 520 : 760;
+    player.y = FEET_Y;
+    if (this.phase === "play" || this.phase === "script" || this.phase === "decide") {
+      // Keep mid-game joiners on the court if a boss/task is already running.
+      if (this.task && this.task.index === 5) {
+        player.x = character === "momo" ? COURT.x + 160 : COURT.x + 400;
+        player.y = NET_Y + 140;
+      }
+    }
+  }
+
+  resumeAfterPartnerJoin() {
+    if (this.pauseReason !== "disconnect") return;
+    if (this.connectedPlayers().length < MAX_PLAYERS) return;
+    if (!this.byCharacter("momo") || !this.byCharacter("tiantian")) return;
+    this.paused = false;
+    this.pauseReason = null;
+    this.openCharacter = null;
+    this.serverState = this.phase === "play" ? "PLAYING" : this.serverState;
+    this.pushFx("sfx", { name: "success" });
+  }
+
   join(socketId, token) {
+    // Same-tab refresh: reclaim an existing connected/disconnected seat by token.
     if (token && this.players.has(token)) {
       const p = this.players.get(token);
       if (!p.connected) {
@@ -1085,20 +1122,13 @@ class Room {
         p.connected = true;
         p.disconnectedAt = null;
         this.clearIdleReset();
-        if (this.pauseReason === "disconnect" && this.connectedPlayers().length === 2) {
-          this.paused = false;
-          this.pauseReason = null;
-          this.serverState = this.phase === "play" ? "PLAYING" : this.serverState;
-          this.pushFx("sfx", { name: "success" });
-        }
+        this.resumeAfterPartnerJoin();
         return { ok: true, playerId: p.id, token: p.id, reconnected: true };
       }
     }
 
-    const seated = this.playerList().filter(
-      (p) => p.connected || (p.disconnectedAt && now() - p.disconnectedAt < IDLE_RESET_MS)
-    );
-    if (seated.length >= MAX_PLAYERS) {
+    // Only active connections fill the room.
+    if (this.connectedPlayers().length >= MAX_PLAYERS) {
       return { full: true };
     }
 
@@ -1117,33 +1147,60 @@ class Room {
       moving: false,
       anim: "idle",
     };
+
+    // Mid-session vacancy: take the freed character so play can resume.
+    if (
+      this.openCharacter &&
+      this.phase !== "select" &&
+      this.phase !== "lobby" &&
+      this.phase !== "complete"
+    ) {
+      this.placeJoinedCharacter(player, this.openCharacter);
+      this.openCharacter = null;
+    }
+
     this.players.set(id, player);
+    this.clearIdleReset();
     if (this.phase === "select") this.serverState = "WAITING";
+    this.resumeAfterPartnerJoin();
     return { ok: true, playerId: id, token: id, reconnected: false };
   }
 
   disconnect(socketId) {
     const p = this.playerList().find((pl) => pl.socketId === socketId);
     if (!p) return;
-    p.connected = false;
-    p.disconnectedAt = now();
-    p.socketId = null;
 
-    if (!p.character && (this.phase === "select" || this.phase === "lobby")) {
-      this.players.delete(p.id);
-      this.scheduleIdleResetIfEmpty();
+    const freedCharacter = p.character;
+    this.inputs.delete(p.id);
+    this.players.delete(p.id);
+
+    if (this.connectedPlayers().length === 0) {
+      this.clearIdleReset();
+      this.openCharacter = null;
+      this.reset(false);
       this.emit();
       return;
     }
 
-    if (this.phase !== "select" && this.phase !== "complete") {
+    // One player remains — keep session, free the slot.
+    if (this.phase === "select" || this.phase === "lobby") {
+      this.clearTimer();
+      this.countdown = null;
+      this.openCharacter = null;
+      const stillHasPick = this.connectedPlayers().some((pl) => pl.character);
+      this.phase = stillHasPick ? "lobby" : "select";
+      this.scene = this.phase;
+      this.serverState = "WAITING";
+      this.paused = false;
+      this.pauseReason = null;
+    } else if (this.phase !== "complete") {
+      this.openCharacter = freedCharacter || this.openCharacter;
       this.paused = true;
       this.pauseReason = "disconnect";
       this.serverState = "PAUSED";
+      this.clearTimer();
     }
 
-    this.clearTimer();
-    this.scheduleIdleResetIfEmpty();
     this.emit();
   }
 
@@ -1291,6 +1348,7 @@ class Room {
         minMs: lineDuration(step.text),
       };
       this.cinematic = null;
+      this.lockScriptAdvance(280);
       this.emit();
       return;
     }
@@ -1342,19 +1400,37 @@ class Room {
     this.playNextScript();
   }
 
+  lockScriptAdvance(ms) {
+    this.scriptLockUntil = now() + Math.max(0, ms || 0);
+  }
+
   advanceDialogue(playerId) {
     if (this.paused) return;
-    if (this.phase !== "script" || !this.line) return;
-    if (this.cinematic) return;
+    if (this.phase !== "script") return;
+    if (now() < (this.scriptLockUntil || 0)) return;
+
+    // Let players skip cinematics (e.g. post-boss hug) so dialogue stays click-driven.
+    if (this.cinematic) {
+      this.clearTimer();
+      this.cinematic = null;
+      this.line = null;
+      this.pushFx("sfx", { name: "click" });
+      this.lockScriptAdvance(320);
+      this.advanceScript();
+      return;
+    }
+
+    if (!this.line) return;
     const elapsed = now() - this.line.startedAt;
     const typeDone = Math.floor(elapsed / DIALOGUE_MS_PER_CHAR) >= this.line.text.length;
-    if (!this.line.revealed && !typeDone && elapsed < this.line.minMs) {
+    if (!this.line.revealed && !typeDone) {
       this.line.revealed = true;
       this.pushFx("sfx", { name: "click" });
       this.emit();
       return;
     }
     this.pushFx("sfx", { name: "click" });
+    this.lockScriptAdvance(280);
     this.advanceScript();
   }
 
@@ -1656,8 +1732,21 @@ class Room {
       racketCd: fresh || !prev || !prev.racketCd ? emptyRacketSideCd() : prev.racketCd,
       shieldHits:
         fresh || !prev || !prev.shieldHits
-          ? { momo: ownedShield && !fresh ? SHIELD_MAX : 0, tiantian: ownedShield && !fresh ? SHIELD_MAX : 0 }
+          ? {
+              momo: ownedShield && !fresh ? shieldMaxFor(prev, "momo") : 0,
+              tiantian: ownedShield && !fresh ? shieldMaxFor(prev, "tiantian") : 0,
+            }
           : { momo: prev.shieldHits.momo || 0, tiantian: prev.shieldHits.tiantian || 0 },
+      shieldMax:
+        fresh || !prev
+          ? { momo: SHIELD_MAX, tiantian: SHIELD_MAX }
+          : typeof prev.shieldMax === "number"
+            ? { momo: prev.shieldMax, tiantian: prev.shieldMax }
+            : {
+                momo: (prev.shieldMax && prev.shieldMax.momo) || SHIELD_MAX,
+                tiantian: (prev.shieldMax && prev.shieldMax.tiantian) || SHIELD_MAX,
+              },
+      angryAttackWave: fresh || !prev ? 0 : prev.angryAttackWave || 0,
       seenTips:
         fresh || !prev || !prev.seenTips
           ? { rage: false, wall: false, minion: false, yellow: false, special: false }
@@ -1804,6 +1893,7 @@ class Room {
       applyEnrageTimerBonus(t);
       t.wallTimer = 0;
       spawnBossWall(t);
+      advanceAngryAttackWave(t);
       spawnMinions(t);
       this.queueBossTip("rage");
       this.queueBossTip("wall");
@@ -1853,8 +1943,8 @@ class Room {
         "This is it! My FINAL form! No more timers, no more breaks — just you versus ME!",
         "I brought SIX of my finest minions, and a red wall that stays WHITE and invincible while even one of them still stands!",
         "Your blue birdies? They bounce right off my wall! But MY red and yellow birdies sail straight through — ha!",
-        "I'll drop BLUE walls on YOUR side — red, yellow, and purple AOE chip them down, but your shots fly straight through!",
-        "Watch for purple AOE blasts too! Clear my minions, smash the red wall, then finish me. Guns are free game!",
+        "I'll drop BLUE walls on YOUR side — red and yellow both smash into them (yellow hits harder!). Your blue shots still fly straight through!",
+        "Watch for my AOE blasts too! Clear my minions, smash the red wall, then finish me. Guns are free game!",
       ],
       i: 0,
       acked: false,
@@ -2353,13 +2443,14 @@ class Room {
       this.pushFx("flash", { color: "#ff3b4a", dur: 320 });
       this.pushFx("sfx", { name: "rumble" });
       this.pushFx("shake", { mag: 8, dur: 280 });
-      spawnMinions(t);
       this.queueBossTip("rage");
       this.queueBossTip("wall");
       this.queueBossTip("minion");
       this.queueBossTip("yellow");
       this.queueBossTip("special");
       if (t.stage === "phase2") {
+        if (!(t.angryAttackWave > 0)) t.angryAttackWave = 1;
+        spawnMinions(t);
         spawnBossWall(t);
       }
     }
@@ -2797,7 +2888,7 @@ class Room {
           zones: placeAoeZones(living(), finalAoe ? 1 : 2),
           until: t.elapsed + BOSS_AOE_WARN,
           flash: false,
-          color: finalAoe ? "purple" : "rage",
+          color: "rage",
         };
         t.nextAoe = t.elapsed + BOSS_AOE_EVERY;
         if (t.ldr) t.ldr.aoe = true;
@@ -2809,7 +2900,7 @@ class Room {
             if (t.invuln[ch] > 0) continue;
             if (Math.hypot(p.x - zone.x, p.y - zone.y) <= zone.r) hurtPlayer(ch);
           }
-          if ((t.stage === "final" || t.finalPhase) && t.aoe.color === "purple" && aoeOverlapsWall(zone, t.blueWall)) {
+          if ((t.stage === "final" || t.finalPhase) && aoeOverlapsWall(zone, t.blueWall)) {
             damageBlueWall(t);
             this.pushFx("sfx", { name: "hurt" });
           }
@@ -2886,8 +2977,10 @@ class Room {
       const oy = shot.y;
       shot.x += shot.vx * dt;
       shot.y += shot.vy * dt;
-      if (passDamageBlueWall(t, shot, ox, oy, shot.x, shot.y)) {
+      if (hitBlueWall(ox, oy, shot.x, shot.y)) {
+        damageBlueWall(t);
         this.pushFx("sfx", { name: "hurt" });
+        return false;
       }
       let bounced = false;
       if (shot.x < left || shot.x > right) {
@@ -2918,8 +3011,10 @@ class Room {
       const oy = shot.y;
       shot.x += shot.vx * dt;
       shot.y += shot.vy * dt;
-      if (passDamageBlueWall(t, shot, ox, oy, shot.x, shot.y)) {
+      if (hitBlueWall(ox, oy, shot.x, shot.y)) {
+        damageBlueWall(t, 2);
         this.pushFx("sfx", { name: "hurt" });
+        return false;
       }
       if (!finalMode) {
         const wall = hitWall(ox, oy, shot.x, shot.y);
@@ -3055,8 +3150,10 @@ class Room {
       const oy = shot.y;
       shot.x += shot.vx * dt;
       shot.y += shot.vy * dt;
-      if (passDamageBlueWall(t, shot, ox, oy, shot.x, shot.y)) {
+      if (hitBlueWall(ox, oy, shot.x, shot.y)) {
+        damageBlueWall(t);
         this.pushFx("sfx", { name: "hurt" });
+        return false;
       }
       if (shot.x < left || shot.x > right || shot.y < top || shot.y > bot) return false;
       return true;
@@ -3623,8 +3720,7 @@ class Room {
       t.shopBought = t.shopBought || { shield: false, racket: false };
       t.shopBought[item] = true;
       if (item === "shield") {
-        t.buffs.shield = true;
-        t.shieldHits = { momo: SHIELD_MAX, tiantian: SHIELD_MAX };
+        grantShieldPurchase(t);
         t.shopToast = "SHIELD BOUGHT";
         t.shopToastTimer = 2.2;
         t.shopLdr = null;
@@ -3862,7 +3958,9 @@ class Room {
       fx: this.fx.filter((f) => !f.for || f.for === (me && me.character)),
       me: playerId,
       myCharacter: me ? me.character : null,
-      players: this.playerList().map((p) => ({
+      playerCount: this.connectedPlayers().length,
+      maxPlayers: MAX_PLAYERS,
+      players: this.connectedPlayers().map((p) => ({
         id: p.id,
         character: p.character,
         connected: p.connected,
@@ -3874,13 +3972,10 @@ class Room {
       })),
     };
     if (this.paused && this.pauseReason === "disconnect") {
-      const gone = this.playerList().find((p) => !p.connected);
-      base.disconnectedName = gone
-        ? gone.character === "momo"
+      base.disconnectedName = this.openCharacter
+        ? this.openCharacter === "momo"
           ? "Momo"
-          : gone.character === "tiantian"
-            ? "Tian Tian"
-            : "Partner"
+          : "Tian Tian"
         : "Partner";
     }
     if (this.task) base.task = this.taskView(me);
@@ -4045,7 +4140,9 @@ class Room {
         smash: t.smash || [],
         buffs: t.buffs || { shield: false, racket: false },
         shieldHits: t.shieldHits || { momo: 0, tiantian: 0 },
+        shieldMax: t.shieldMax || { momo: SHIELD_MAX, tiantian: SHIELD_MAX },
         myShieldHits: (t.shieldHits || {})[ch] || 0,
+        myShieldMax: shieldMaxFor(t, ch),
         minions: t.minions || [],
         minionShots: t.minionShots || [],
         shopVote: t.shopVote || { momo: null, tiantian: null },

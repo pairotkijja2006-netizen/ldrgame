@@ -57,6 +57,7 @@ const UI = (() => {
       state.phase,
       state.scene,
       state.myCharacter,
+      state.playerCount,
       state.countdown,
       state.taken && state.taken.momo,
       state.taken && state.taken.tiantian,
@@ -181,6 +182,7 @@ const UI = (() => {
     const wrap = el(`<div class="overlay soft">
       <div class="title">WHO ARE YOU?</div>
       <p class="subtitle">A 2-player cooperative love story.<br/>Pick your person.</p>
+      <p class="subtitle">Players: ${state.playerCount != null ? state.playerCount : 0} / ${state.maxPlayers || 2}</p>
       <div class="row">
         ${card("momo", "MOMO", "momo")}
         ${card("tiantian", "TIAN TIAN", "tian")}
@@ -206,6 +208,7 @@ const UI = (() => {
     root().innerHTML = "";
     const html = `<div class="overlay soft">
       <div class="title">${both ? "Both players are here!" : "WAITING ROOM"}</div>
+      <p class="subtitle">Players: ${state.playerCount != null ? state.playerCount : 0} / ${state.maxPlayers || 2}</p>
       <div class="row">
         <div class="lobby-card">
           <h3>MOMO</h3>
@@ -527,13 +530,20 @@ const UI = (() => {
     const gunLevel = typeof t.gunLevel === "number" ? t.gunLevel : t.myGunLevel || 0;
     const coins = t.coins || 0;
     const myShield = t.myShieldHits != null ? t.myShieldHits : (t.shieldHits || {})[me] || 0;
+    const myShieldMax =
+      t.myShieldMax != null
+        ? t.myShieldMax
+        : typeof t.shieldMax === "number"
+          ? t.shieldMax
+          : (t.shieldMax && t.shieldMax[me]) || 4;
     const myRacket = t.myRacket != null ? t.myRacket : (t.racket || {})[me] || 0;
     const myRegen = t.myRacketRegen != null ? t.myRacketRegen : (t.racketRegen || {})[me] || 0;
     const racketCd =
       t.buffs && t.buffs.racket && myRacket < 2 && myRegen > 0
         ? `<span class="attr-count">${Math.ceil(myRegen)}</span>`
         : "";
-    const shieldCount = t.buffs && t.buffs.shield ? `<span class="attr-count">${myShield}</span>` : "";
+    const shieldCount =
+      t.buffs && t.buffs.shield ? `<span class="attr-count">${myShield}/${myShieldMax}</span>` : "";
     const icon = (name, tip, countHtml) =>
       `<span class="buff-tip-wrap"><span class="hud-ico-slot"><img class="hud-ico" src="/assets/${name}" alt="" />${
         countHtml || ""
@@ -551,8 +561,7 @@ const UI = (() => {
         ${attrIcons ? `<div class="buff-row">${attrIcons}</div>` : ""}
       </div>
     </div>
-    ${t.shopToast ? `<div class="shop-toast">${esc(t.shopToast)}</div>` : ""}
-    <button class="btn boss-add-coins" type="button" data-add-coins="5">+5 COINS</button>`;
+    ${t.shopToast ? `<div class="shop-toast">${esc(t.shopToast)}</div>` : ""}`;
     let shop = "";
     if (t.stage === "shopAsk") {
       const vote = t.shopVote || {};
@@ -612,9 +621,9 @@ const UI = (() => {
           "shield",
           "Shield",
           5,
-          "Gives each player a personal shield that blocks up to 4 enemy hits.",
+          "Personal shield. Buying again while you still have charges adds +4 (current+4 becomes the new max). Once per shop visit.",
           "shop-shield.png",
-          "Shield bought — each player has 4 personal shield hits."
+          "Shield bought — capacity refreshed for this shop visit."
         )}
         ${itemRow(
           "racket",
@@ -893,9 +902,6 @@ const UI = (() => {
           Net.emit("puzzle", { action: "select", item: btn.getAttribute("data-select") });
         };
       });
-      document.querySelectorAll("[data-add-coins]").forEach((btn) => {
-        btn.onclick = () => Net.emit("puzzle", { action: "addCoins" });
-      });
       document.querySelectorAll("[data-tip-ack]").forEach((btn) => {
         btn.onclick = (e) => {
           e.preventDefault();
@@ -1012,7 +1018,7 @@ const UI = (() => {
     if (disc) {
       return `<div class="overlay"><div class="banner">
         <div class="title" style="font-size:16px">${name} has disconnected.</div>
-        <p class="subtitle">Waiting for them to reconnect...</p>
+        <p class="subtitle">Waiting for another player to join...</p>
       </div></div>`;
     }
     return `<div class="overlay">
